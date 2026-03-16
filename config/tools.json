@@ -3,14 +3,14 @@
     "type": "function",
     "function": {
       "name": "query_all_layers",
-      "description": "查询共有哪些图层，列出所有采集任务图层名称",
+      "description": "查询共有哪些图层，列出所有采集任务图层名称，field_names主要是用来查询某图层的某条数据的详情字段",
       "parameters": {
         "type": "object",
         "properties": {
           "sqls": {
             "type": "array",
             "default": [
-              "SELECT id, name, description,table_name, type FROM gather_task"
+              "SELECT t.id, t.name, t.description, t.table_name, t.type, GROUP_CONCAT(f.field_name) as field_names FROM gather_task t LEFT JOIN gather_task_field f ON t.id = f.taskid AND f.show_flag = 1 GROUP BY t.id, t.name, t.description, t.table_name, t.type"
             ]
           }
         },
