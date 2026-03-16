@@ -12,52 +12,24 @@ sql_util = CombineSqlUtil()
 MODEL = "glm-5"
 # MODEL = "glm-4-flash"
 
-
-# Function Calling 工具定义
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "query_layer_count",
-            "description": "查询指定图层（如网吧、加油站、学校）的数据总条数",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layerName": {
-                        "type": "string",
-                        "description": "图层名称，例如：网吧、加油站、学校"
-                    },
-                    "sqls": {
-                        "type": "array",
-                        "description": "SQL 语句数组",
-                        "items": {
-                            "type": "string"
-                        },
-                        "default": [
-                            "SELECT table_name FROM gather_task WHERE name = #{layerName}",
-                            "SELECT COUNT(*) as countNum FROM `#{table_name}`"
-                        ]
-                    }
-                },
-                "required": ["layerName"]
-            }
-        }
-    }
-]
+# 从配置文件加载工具定义
+with open("config/tools.json", "r", encoding="utf-8") as f:
+    TOOLS = json.load(f)
 
 
 def execute_tool(name: str, arguments: dict) -> str:
     """执行工具调用，返回结果字符串"""
     if name == "query_layer_count":
-        layer_name = arguments.get("layerName", "")
-        sqls = arguments.get("sqls", [
-            "SELECT table_name FROM gather_task WHERE name = #{layerName}",
-            "SELECT COUNT(*) as countNum FROM `#{table_name}`"
-        ])
+        # 从 TOOLS 配置中获取默认 sqls
+        default_sqls = []
+        for tool in TOOLS:
+            if tool.get("function", {}).get("name") == name:
+                default_sqls = tool["function"]["parameters"]["properties"]["sqls"]["default"]
+                break
         
         param = {
-            "layerName": layer_name,
-            "sqls": sqls
+            "layerName": arguments.get("layerName", ""),
+            "sqls": arguments.get("sqls", default_sqls)
         }
         
         result = sql_util.execute_combine_sql(param)

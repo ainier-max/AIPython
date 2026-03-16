@@ -1,0 +1,8 @@
+{
+  "query_layer_count": {
+    "sqls": [
+      "SELECT table_name FROM gather_task WHERE name = #{layerName}",
+      "SELECT COUNT(*) as countNum FROM `#{table_name}`"
+    ]
+  }
+}

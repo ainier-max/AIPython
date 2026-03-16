@@ -1,0 +1,26 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "query_layer_count",
+      "description": "查询指定图层（如网吧、加油站、学校）的数据总条数",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "layerName": {
+            "type": "string",
+            "description": "图层名称，例如：网吧、加油站、学校"
+          },
+          "sqls": {
+            "type": "array",
+            "default": [
+              "SELECT table_name FROM gather_task WHERE name = #{layerName}",
+              "SELECT COUNT(*) as countNum FROM `#{table_name}`"
+            ]
+          }
+        },
+        "required": ["layerName"]
+      }
+    }
+  }
+]
