@@ -2,11 +2,12 @@ import os
 import json
 from zai import ZhipuAiClient
 from dotenv import load_dotenv
-from db import query_layer_count
+from util.combine_sql_util import CombineSqlUtil
 
 load_dotenv()
 
 client = ZhipuAiClient(api_key=os.getenv("ZHIPU_API_KEY", ""))
+sql_util = CombineSqlUtil()
 
 MODEL = "glm-5"
 # MODEL = "glm-4-flash"
@@ -25,6 +26,17 @@ TOOLS = [
                     "layerName": {
                         "type": "string",
                         "description": "图层名称，例如：网吧、加油站、学校"
+                    },
+                    "sqls": {
+                        "type": "array",
+                        "description": "SQL 语句数组",
+                        "items": {
+                            "type": "string"
+                        },
+                        "default": [
+                            "SELECT table_name FROM gather_task WHERE name = #{layerName}",
+                            "SELECT COUNT(*) as countNum FROM `#{table_name}`"
+                        ]
                     }
                 },
                 "required": ["layerName"]
@@ -37,7 +49,18 @@ TOOLS = [
 def execute_tool(name: str, arguments: dict) -> str:
     """执行工具调用，返回结果字符串"""
     if name == "query_layer_count":
-        result = query_layer_count(arguments.get("layerName", ""))
+        layer_name = arguments.get("layerName", "")
+        sqls = arguments.get("sqls", [
+            "SELECT table_name FROM gather_task WHERE name = #{layerName}",
+            "SELECT COUNT(*) as countNum FROM `#{table_name}`"
+        ])
+        
+        param = {
+            "layerName": layer_name,
+            "sqls": sqls
+        }
+        
+        result = sql_util.execute_combine_sql(param)
         return json.dumps(result, ensure_ascii=False)
     return json.dumps({"error": f"未知工具: {name}"})
 

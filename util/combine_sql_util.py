@@ -94,10 +94,17 @@ class CombineSqlUtil:
         """
         result = sql
         for key, value in params.items():
-            if isinstance(value, str):
-                result = result.replace(f"#{{{key}}}", f"'{value}'")
-            else:
-                result = result.replace(f"#{{{key}}}", str(value))
+            placeholder = f"#{{{key}}}"
+            if placeholder in result:
+                # 判断是否是表名/字段名（反引号包裹的情况）
+                if f"`{placeholder}`" in result:
+                    result = result.replace(f"`{placeholder}`", f"`{value}`")
+                # 普通字符串参数加单引号
+                elif isinstance(value, str):
+                    result = result.replace(placeholder, f"'{value}'")
+                # 数字直接替换
+                else:
+                    result = result.replace(placeholder, str(value))
         return result
 
 
@@ -110,7 +117,7 @@ if __name__ == "__main__":
         "layerName": "网吧",
         "sqls": [
             "SELECT table_name FROM gather_task WHERE name = #{layerName}",
-            "SELECT COUNT(*) as countNum FROM #{table_name}"
+            "SELECT COUNT(*) as countNum FROM `#{table_name}`"
         ]
     }
     
