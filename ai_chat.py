@@ -92,6 +92,8 @@ async def chat_stream(user_message: str, send_func):
             )
             for chunk in stream_response:
                 delta = chunk.choices[0].delta
+                if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                    await send_func(f"[THINKING]{delta.reasoning_content}")
                 if delta.content:
                     await send_func(delta.content)
 
@@ -104,6 +106,8 @@ async def chat_stream(user_message: str, send_func):
             )
             for chunk in stream_response:
                 delta = chunk.choices[0].delta
+                if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                    await send_func(f"[THINKING]{delta.reasoning_content}")
                 if delta.content:
                     await send_func(delta.content)
 
