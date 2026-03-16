@@ -22,5 +22,34 @@
         "required": ["layerName"]
       }
     }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "query_layer_data",
+      "description": "查询指定图层的数据列表，例如查询网吧有哪些数据",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "layerName": {
+            "type": "string",
+            "description": "图层名称，例如：网吧、加油站、学校"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "返回数据条数限制，默认10条",
+            "default": 10
+          },
+          "sqls": {
+            "type": "array",
+            "default": [
+              "SELECT table_name FROM gather_task WHERE name = #{layerName}",
+              "SELECT * FROM `#{table_name}` LIMIT #{limit}"
+            ]
+          }
+        },
+        "required": ["layerName"]
+      }
+    }
   }
 ]
