@@ -2,6 +2,25 @@
   {
     "type": "function",
     "function": {
+      "name": "query_all_layers",
+      "description": "查询共有哪些图层，列出所有采集任务图层名称",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sqls": {
+            "type": "array",
+            "default": [
+              "SELECT id, name, description,table_name, type FROM gather_task"
+            ]
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "query_layer_count",
       "description": "查询指定图层（如网吧、加油站、学校）的数据总条数",
       "parameters": {

@@ -20,7 +20,7 @@ with open("config/tools.json", "r", encoding="utf-8") as f:
 def execute_tool(name: str, arguments: dict) -> str:
     """执行工具调用，返回结果字符串"""
     try:
-        if name in ["query_layer_count", "query_layer_data"]:
+        if name in ["query_layer_count", "query_layer_data", "query_all_layers"]:
             # 从 TOOLS 配置中获取默认值
             default_sqls = []
             default_limit = None
