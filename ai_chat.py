@@ -8,7 +8,9 @@ load_dotenv()
 
 client = ZhipuAiClient(api_key=os.getenv("ZHIPU_API_KEY", ""))
 
-MODEL = "glm-4-flash"
+MODEL = "glm-5"
+# MODEL = "glm-4-flash"
+
 
 # Function Calling 工具定义
 TOOLS = [
