@@ -109,8 +109,8 @@ if __name__ == "__main__":
     param = {
         "layerName": "网吧",
         "sqls": [
-            "SELECT table_name FROM layer_config WHERE layer_name = #{layerName}",
-            "SELECT COUNT(*) as count FROM #{table_name}"
+            "SELECT table_name FROM gather_task WHERE name = #{layerName}",
+            "SELECT COUNT(*) as countNum FROM #{table_name}"
         ]
     }
     
