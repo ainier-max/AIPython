@@ -21,18 +21,24 @@ def execute_tool(name: str, arguments: dict) -> str:
     """执行工具调用，返回结果字符串"""
     try:
         if name in ["query_layer_count", "query_layer_data"]:
-            # 从 TOOLS 配置中获取默认 sqls
+            # 从 TOOLS 配置中获取默认值
             default_sqls = []
+            default_limit = None
             for tool in TOOLS:
                 if tool.get("function", {}).get("name") == name:
                     default_sqls = tool["function"]["parameters"]["properties"]["sqls"]["default"]
+                    limit_prop = tool["function"]["parameters"]["properties"].get("limit", {})
+                    default_limit = limit_prop.get("default")
                     break
             
             param = {
                 "layerName": arguments.get("layerName", ""),
-                "limit": arguments.get("limit", 10),
                 "sqls": arguments.get("sqls", default_sqls)
             }
+            
+            # 如果配置中有 limit 默认值，则添加到参数中
+            if default_limit is not None:
+                param["limit"] = arguments.get("limit", default_limit)
             
             result = sql_util.execute_combine_sql(param)
             return json.dumps(result, ensure_ascii=False)
