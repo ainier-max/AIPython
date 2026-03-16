@@ -23,7 +23,7 @@ class CombineSqlUtil:
         """获取数据库连接"""
         return pymysql.connect(**self.db_config)
     
-    def execute_combine_sql(self, param: dict) -> list:
+    def execute_combine_sql(self, param: dict):
         """
         执行组合 SQL
         :param param: 包含 sqls 数组和其他参数
@@ -33,7 +33,7 @@ class CombineSqlUtil:
         
         sqls = param.get("sqls", [])
         if not sqls:
-            return None
+            return {"success": False, "error": "sqls 参数为空"}
         
         conn = None
         try:
@@ -43,22 +43,26 @@ class CombineSqlUtil:
             
             with conn.cursor() as cursor:
                 for i, sql in enumerate(sqls):
-                    # 执行当前 SQL，替换参数占位符
                     executed_sql = self._replace_params(sql, current_param)
+                    print(f"执行 SQL[{i}]: {executed_sql}")
                     cursor.execute(executed_sql)
                     result = cursor.fetchall()
                     
-                    # 如果不是最后一个 SQL，将结果合并到参数中
                     if i < len(sqls) - 1 and result:
                         current_param.update(result[0])
+                    elif i < len(sqls) - 1 and not result:
+                        return {"success": False, "error": f"第{i+1}条SQL无结果，后续SQL无法执行"}
             
             return result
             
+        except Exception as e:
+            print(f"执行组合 SQL 异常: {e}")
+            return {"success": False, "error": str(e)}
         finally:
             if conn:
                 conn.close()
 
-    def execute_one_sql(self, param: dict) -> list:
+    def execute_one_sql(self, param: dict):
         """
         执行单个 SQL
         :param param: 包含 sql 字段和其他参数
@@ -68,7 +72,7 @@ class CombineSqlUtil:
         
         sql = param.get("sql")
         if not sql:
-            return None
+            return {"success": False, "error": "sql 参数为空"}
         
         conn = None
         try:
@@ -81,6 +85,9 @@ class CombineSqlUtil:
             
             return result
             
+        except Exception as e:
+            print(f"执行单个 SQL 异常: {e}")
+            return {"success": False, "error": str(e)}
         finally:
             if conn:
                 conn.close()
@@ -96,13 +103,10 @@ class CombineSqlUtil:
         for key, value in params.items():
             placeholder = f"#{{{key}}}"
             if placeholder in result:
-                # 判断是否是表名/字段名（反引号包裹的情况）
                 if f"`{placeholder}`" in result:
                     result = result.replace(f"`{placeholder}`", f"`{value}`")
-                # 普通字符串参数加单引号
                 elif isinstance(value, str):
                     result = result.replace(placeholder, f"'{value}'")
-                # 数字直接替换
                 else:
                     result = result.replace(placeholder, str(value))
         return result
@@ -112,7 +116,6 @@ class CombineSqlUtil:
 if __name__ == "__main__":
     util = CombineSqlUtil()
     
-    # 示例：通过图层名称查询表名，再统计总条数
     param = {
         "layerName": "网吧",
         "sqls": [
