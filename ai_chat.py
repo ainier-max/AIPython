@@ -16,11 +16,14 @@ MODEL = "glm-5"
 with open("config/tools.json", "r", encoding="utf-8") as f:
     TOOLS = json.load(f)
 
+# 从配置中动态获取所有工具名称
+TOOL_NAMES = [tool.get("function", {}).get("name") for tool in TOOLS if tool.get("function", {}).get("name")]
+
 
 def execute_tool(name: str, arguments: dict) -> str:
     """执行工具调用，返回结果字符串"""
     try:
-        if name in ["query_layer_count", "query_layer_data", "query_all_layers"]:
+        if name in TOOL_NAMES:
             # 从 TOOLS 配置中获取默认值
             default_sqls = []
             default_limit = None
