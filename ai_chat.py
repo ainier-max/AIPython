@@ -109,6 +109,10 @@ async def chat_stream(user_message: str, send_func, session_id: str = "default")
                 func_args = json.loads(tool_call.function.arguments)
 
                 print(f"[Function Calling {iteration+1}] {func_name}({func_args})")
+                
+                # 向前端推送工具调用信息
+                await send_func(f"[TOOL]{func_name}")
+                
                 tool_result = execute_tool(func_name, func_args)
                 print(f"[Function Result {iteration+1}] {tool_result}")
 
