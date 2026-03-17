@@ -75,36 +75,42 @@ async def chat_stream(user_message: str, send_func, session_id: str = "default")
             session_history[session_id] = [
                 {
                     "role": "system",
-                    "content": "你是一个图层数据查询助手，只能帮用户查询图层相关的数据。支持的功能有：查询所有图层列表、查询指定图层的数据条数、查询指定图层的数据列表、查询指定图层中某条数据的详情。如果用户的问题与图层数据查询无关，请友好地告知用户：'抱歉，我只支持图层数据相关的查询，暂不支持该问题。'不要尝试回答无关问题。"
+                    "content": "你是一个图层数据查询助手，只能帮用户查询图层相关的数据。支持的功能有：查询所有图层列表、查询指定图层的数据条数、查询指定图层的数据列表、查询指定图层中某条数据的详情。如果用户的问题与图层数据查询无关，请友好地告知用户：'抱歉，我只支持图层数据相关的查询，暂不支持该问题。'不要尝试回答无关问题。重要：如果需要查询数据，直接调用工具，不要说'我会查询'或'接下来查询'等话，直接执行。"
                 }
             ]
         
         messages = session_history[session_id].copy()
         messages.append({"role": "user", "content": user_message})
 
-        # 第一次请求：非流式，检测是否触发 Function Calling
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            stream=False,
-            max_tokens=2000,
-            temperature=0.7
-        )
+        # 循环处理 Function Calling，最多 5 轮
+        max_iterations = 5
+        for iteration in range(max_iterations):
+            # 请求模型（非流式）
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                stream=False,
+                max_tokens=2000,
+                temperature=0.7
+            )
 
-        message = response.choices[0].message
-        messages.append(message.model_dump())
+            message = response.choices[0].message
+            messages.append(message.model_dump())
 
-        # 处理 Function Calling
-        if message.tool_calls:
+            # 如果没有工具调用，跳出循环
+            if not message.tool_calls:
+                break
+
+            # 执行所有工具调用
             for tool_call in message.tool_calls:
                 func_name = tool_call.function.name
                 func_args = json.loads(tool_call.function.arguments)
 
-                print(f"[Function Calling] {func_name}({func_args})")
+                print(f"[Function Calling {iteration+1}] {func_name}({func_args})")
                 tool_result = execute_tool(func_name, func_args)
-                print(f"[Function Result] {tool_result}")
+                print(f"[Function Result {iteration+1}] {tool_result}")
 
                 messages.append({
                     "role": "tool",
@@ -112,36 +118,20 @@ async def chat_stream(user_message: str, send_func, session_id: str = "default")
                     "tool_call_id": tool_call.id
                 })
 
-            # 第二次请求：流式，让模型根据工具结果组织回复
-            stream_response = client.chat.completions.create(
-                model=MODEL,
-                messages=messages,
-                stream=True,
-                max_tokens=2000,
-                temperature=0.7
-            )
-            for chunk in stream_response:
-                delta = chunk.choices[0].delta
-                if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-                    await send_func(f"[THINKING]{delta.reasoning_content}")
-                if delta.content:
-                    await send_func(delta.content)
-
-        else:
-            # 无 Function Calling，直接流式输出
-            stream_response = client.chat.completions.create(
-                model=MODEL,
-                messages=messages,
-                stream=True,
-                max_tokens=2000,
-                temperature=0.7
-            )
-            for chunk in stream_response:
-                delta = chunk.choices[0].delta
-                if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-                    await send_func(f"[THINKING]{delta.reasoning_content}")
-                if delta.content:
-                    await send_func(delta.content)
+        # 最后流式输出结果
+        stream_response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            stream=True,
+            max_tokens=2000,
+            temperature=0.7
+        )
+        for chunk in stream_response:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                await send_func(f"[THINKING]{delta.reasoning_content}")
+            if delta.content:
+                await send_func(delta.content)
 
         # 保存用户消息和 AI 回复到历史
         session_history[session_id].append({"role": "user", "content": user_message})
