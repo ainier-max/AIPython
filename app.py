@@ -17,6 +17,11 @@ app.add_middleware(
 async def websocket_chat(websocket: WebSocket):
     await websocket.accept()
     print("WebSocket 连接建立")
+    
+    # 为每个连接生成唯一会话ID
+    import uuid
+    session_id = str(uuid.uuid4())
+    
     try:
         while True:
             user_message = await websocket.receive_text()
@@ -25,7 +30,7 @@ async def websocket_chat(websocket: WebSocket):
             async def send(text: str):
                 await websocket.send_text(text)
 
-            await chat_stream(user_message, send)
+            await chat_stream(user_message, send, session_id)
 
     except WebSocketDisconnect:
         print("WebSocket 连接断开")
