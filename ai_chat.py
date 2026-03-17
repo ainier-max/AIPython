@@ -24,24 +24,33 @@ def execute_tool(name: str, arguments: dict) -> str:
     """执行工具调用，返回结果字符串"""
     try:
         if name in TOOL_NAMES:
-            # 从 TOOLS 配置中获取默认值
-            default_sqls = []
-            default_limit = None
+            # 从 TOOLS 配置中获取工具定义
+            tool_config = None
             for tool in TOOLS:
                 if tool.get("function", {}).get("name") == name:
-                    default_sqls = tool["function"]["parameters"]["properties"]["sqls"]["default"]
-                    limit_prop = tool["function"]["parameters"]["properties"].get("limit", {})
-                    default_limit = limit_prop.get("default")
+                    tool_config = tool["function"]["parameters"]
                     break
             
-            param = {
-                "layerName": arguments.get("layerName", ""),
-                "sqls": arguments.get("sqls", default_sqls)
-            }
+            if not tool_config:
+                return json.dumps({"error": f"未找到工具配置: {name}"})
             
-            # 如果配置中有 limit 默认值，则添加到参数中
-            if default_limit is not None:
-                param["limit"] = arguments.get("limit", default_limit)
+            # 动态构建 param，遍历 properties
+            param = {}
+            properties = tool_config.get("properties", {})
+            
+            for prop_name, prop_config in properties.items():
+                if prop_name == "sqls":
+                    # sqls 特殊处理，使用默认值
+                    param["sqls"] = arguments.get("sqls", prop_config.get("default", []))
+                else:
+                    # 其他参数从 arguments 获取，如果有 default 则使用默认值
+                    default_value = prop_config.get("default")
+                    if prop_name in arguments:
+                        param[prop_name] = arguments[prop_name]
+                    elif default_value is not None:
+                        param[prop_name] = default_value
+                    elif prop_name in arguments:
+                        param[prop_name] = arguments[prop_name]
             
             result = sql_util.execute_combine_sql(param)
             return json.dumps(result, ensure_ascii=False)
@@ -57,7 +66,13 @@ async def chat_stream(user_message: str, send_func):
     send_func: 异步回调，用于逐块推送内容给客户端
     """
     try:
-        messages = [{"role": "user", "content": user_message}]
+        messages = [
+            {
+                "role": "system",
+                "content": "你是一个图层数据查询助手，只能帮用户查询图层相关的数据。支持的功能有：查询所有图层列表、查询指定图层的数据条数、查询指定图层的数据列表、查询指定图层中某条数据的详情。如果用户的问题与图层数据查询无关，请友好地告知用户：'抱歉，我只支持图层数据相关的查询，暂不支持该问题。'不要尝试回答无关问题。"
+            },
+            {"role": "user", "content": user_message}
+        ]
 
         # 第一次请求：非流式，检测是否触发 Function Calling
         response = client.chat.completions.create(

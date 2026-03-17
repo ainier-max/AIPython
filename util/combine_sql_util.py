@@ -40,7 +40,8 @@ class CombineSqlUtil:
             conn = self._get_connection()
             current_param = param.copy()
             result = None
-            
+            print("executeCombineSql--current_param",current_param)
+
             with conn.cursor() as cursor:
                 for i, sql in enumerate(sqls):
                     executed_sql = self._replace_params(sql, current_param)
@@ -92,6 +93,9 @@ class CombineSqlUtil:
             if conn:
                 conn.close()
     
+    # 不需要加引号的参数名（用于 SELECT 字段列表等场景）
+    RAW_PARAMS = {"field_names", "fields", "columns"}
+
     def _replace_params(self, sql: str, params: dict) -> str:
         """
         替换 SQL 中的参数占位符
@@ -102,13 +106,24 @@ class CombineSqlUtil:
         result = sql
         for key, value in params.items():
             placeholder = f"#{{{key}}}"
-            if placeholder in result:
-                if f"`{placeholder}`" in result:
-                    result = result.replace(f"`{placeholder}`", f"`{value}`")
-                elif isinstance(value, str):
-                    result = result.replace(placeholder, f"'{value}'")
-                else:
-                    result = result.replace(placeholder, str(value))
+            if placeholder not in result:
+                continue
+                
+            # 1. 反引号包裹的表名/字段名
+            if f"`{placeholder}`" in result:
+                result = result.replace(f"`{placeholder}`", f"`{value}`")
+            # 2. LIKE 模糊查询（优先处理，避免被加引号）
+            elif f"'%{placeholder}%'" in result:
+                result = result.replace(f"'%{placeholder}%'", f"'%{value}%'")
+            # 3. 字段列表等不加引号
+            elif key in self.RAW_PARAMS:
+                result = result.replace(placeholder, str(value))
+            # 4. 普通字符串参数
+            elif isinstance(value, str):
+                result = result.replace(placeholder, f"'{value}'")
+            # 5. 数字等其他类型
+            else:
+                result = result.replace(placeholder, str(value))
         return result
 
 
