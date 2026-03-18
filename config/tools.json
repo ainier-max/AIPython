@@ -19,7 +19,7 @@
             ]
           }
         },
-        "required": ["layerName", "keyword"]
+        "required": ["keyword"]
       }
     }
   },

@@ -63,13 +63,19 @@ class CombineSqlUtil:
                                 sub_param = row_param.copy()
                                 sub_param["sqls"] = sqls[i+1:]
                                 sub_result = self.execute_combine_sql(sub_param)
+                                # 跳过失败的结果
+                                if isinstance(sub_result, dict) and sub_result.get("success") == False:
+                                    continue
                                 if isinstance(sub_result, list):
                                     all_results.extend(sub_result)
+                                elif sub_result:
+                                    all_results.append(sub_result)
+                            print(f"遍历结果集合并: {len(all_results)} 条记录")
                             return all_results
                         else:
                             # 单条记录，合并参数继续
                             current_param.update(result[0])
-            
+                            current_param.update(result[0])
             return result
             
         except Exception as e:
