@@ -76,6 +76,7 @@ async def chat_stream(user_message: str, send_func, session_id: str = "default")
         "重要：如果需要查询数据，直接调用工具，不要说'我会查询'或'接下来查询'等话。",
         "查询完成就直接输出结果。"
     ]
+
     try:
         # 获取或初始化会话历史
         if session_id not in session_history:
