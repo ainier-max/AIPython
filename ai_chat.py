@@ -110,8 +110,15 @@ async def chat_stream(user_message: str, send_func, session_id: str = "default")
 
                 print(f"[Function Calling {iteration+1}] {func_name}({func_args})")
                 
+                # 获取工具描述
+                tool_desc = ""
+                for tool in TOOLS:
+                    if tool.get("function", {}).get("name") == func_name:
+                        tool_desc = tool["function"].get("description", "")
+                        break
+                
                 # 向前端推送工具调用信息
-                await send_func(f"[TOOL]{func_name}")
+                await send_func(f"\n\n🔧 **{func_name}**: {tool_desc}\n\n")
                 
                 tool_result = execute_tool(func_name, func_args)
                 print(f"[Function Result {iteration+1}] {tool_result}")

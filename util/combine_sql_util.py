@@ -40,7 +40,6 @@ class CombineSqlUtil:
             conn = self._get_connection()
             current_param = param.copy()
             result = None
-            print("executeCombineSql--current_param",current_param)
 
             with conn.cursor() as cursor:
                 for i, sql in enumerate(sqls):
@@ -49,10 +48,27 @@ class CombineSqlUtil:
                     cursor.execute(executed_sql)
                     result = cursor.fetchall()
                     
-                    if i < len(sqls) - 1 and result:
-                        current_param.update(result[0])
-                    elif i < len(sqls) - 1 and not result:
-                        return {"success": False, "error": f"第{i+1}条SQL无结果，后续SQL无法执行"}
+                    # 如果不是最后一条 SQL
+                    if i < len(sqls) - 1:
+                        if not result:
+                            return {"success": False, "error": f"第{i+1}条SQL无结果，后续SQL无法执行"}
+                        
+                        # 如果返回多条记录，遍历执行后续 SQL
+                        if len(result) > 1:
+                            all_results = []
+                            for row in result:
+                                row_param = current_param.copy()
+                                row_param.update(row)
+                                # 递归执行剩余 SQL
+                                sub_param = row_param.copy()
+                                sub_param["sqls"] = sqls[i+1:]
+                                sub_result = self.execute_combine_sql(sub_param)
+                                if isinstance(sub_result, list):
+                                    all_results.extend(sub_result)
+                            return all_results
+                        else:
+                            # 单条记录，合并参数继续
+                            current_param.update(result[0])
             
             return result
             
