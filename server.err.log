@@ -1,0 +1,6 @@
+INFO:     Will watch for changes in these directories: ['E:\\workspaceForMe\\AI\\github\\AIPython']
+INFO:     Uvicorn running on http://0.0.0.0:8088 (Press CTRL+C to quit)
+INFO:     Started reloader process [44664] using StatReload
+INFO:     Started server process [98868]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

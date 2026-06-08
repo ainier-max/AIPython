@@ -1,99 +1,146 @@
-import os
 import json
-from zai import ZhipuAiClient
+import os
+
 from dotenv import load_dotenv
+from openai import OpenAI
+
 from util.combine_sql_util import CombineSqlUtil
 
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+TOOLS_PATH = os.path.join(BASE_DIR, "config", "tools.json")
 
-client = ZhipuAiClient(api_key=os.getenv("ZHIPU_API_KEY", ""))
+load_dotenv(ENV_PATH)
+
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY", ""),
+    base_url=os.getenv("OPENAI_BASE_URL", "https://xcode.best/v1"),
+)
 sql_util = CombineSqlUtil()
 
-MODEL = "glm-5"
-# MODEL = "glm-4-flash"
+MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
 
-# 会话历史管理
+# Session history keyed by websocket session id.
 session_history = {}
 
-# 从配置文件加载工具定义
-with open("config/tools.json", "r", encoding="utf-8") as f:
+with open(TOOLS_PATH, "r", encoding="utf-8") as f:
     TOOLS = json.load(f)
 
-# 从配置中动态获取所有工具名称
-TOOL_NAMES = [tool.get("function", {}).get("name") for tool in TOOLS if tool.get("function", {}).get("name")]
+TOOL_NAMES = [
+    tool.get("function", {}).get("name")
+    for tool in TOOLS
+    if tool.get("function", {}).get("name")
+]
+
+SYSTEM_PROMPT = " ".join(
+    [
+        "\u4f60\u662f\u4e00\u4e2a\u56fe\u5c42\u6570\u636e\u67e5\u8be2\u52a9\u624b\uff0c\u53ea\u80fd\u5e2e\u7528\u6237\u67e5\u8be2\u56fe\u5c42\u76f8\u5173\u7684\u6570\u636e\u3002",
+        "\u652f\u6301\u7684\u529f\u80fd\u6709\uff1a\u67e5\u8be2\u6240\u6709\u56fe\u5c42\u5217\u8868\u3001\u67e5\u8be2\u6307\u5b9a\u56fe\u5c42\u7684\u6570\u636e\u6761\u6570\u3001\u67e5\u8be2\u6307\u5b9a\u56fe\u5c42\u7684\u6570\u636e\u5217\u8868\u3001\u67e5\u8be2\u6307\u5b9a\u56fe\u5c42\u4e2d\u67d0\u6761\u6570\u636e\u7684\u8be6\u60c5\u3002",
+        "\u91cd\u8981\uff1a\u5982\u679c\u9700\u8981\u67e5\u8be2\u6570\u636e\uff0c\u76f4\u63a5\u8c03\u7528\u5de5\u5177\uff0c\u4e0d\u8981\u8bf4'\u6211\u4f1a\u67e5\u8be2'\u6216'\u63a5\u4e0b\u6765\u67e5\u8be2'\u7b49\u8bdd\u3002",
+        "\u67e5\u8be2\u5b8c\u6210\u5c31\u76f4\u63a5\u8f93\u51fa\u7ed3\u679c\u3002",
+    ]
+)
+
+
+def _serialize_assistant_message(message):
+    payload = {"role": "assistant"}
+
+    if message.content is not None:
+        payload["content"] = message.content
+
+    if message.tool_calls:
+        payload["tool_calls"] = [
+            {
+                "id": tool_call.id,
+                "type": tool_call.type,
+                "function": {
+                    "name": tool_call.function.name,
+                    "arguments": tool_call.function.arguments,
+                },
+            }
+            for tool_call in message.tool_calls
+        ]
+
+    return payload
+
+
+def _extract_text(content):
+    if isinstance(content, str):
+        return content
+
+    if not content:
+        return ""
+
+    texts = []
+    for part in content:
+        part_type = part.get("type") if isinstance(part, dict) else getattr(part, "type", None)
+        if part_type != "text":
+            continue
+
+        text_value = part.get("text") if isinstance(part, dict) else getattr(part, "text", "")
+        if isinstance(text_value, str):
+            texts.append(text_value)
+        elif hasattr(text_value, "value"):
+            texts.append(text_value.value)
+
+    return "".join(texts)
 
 
 def execute_tool(name: str, arguments: dict) -> str:
-    """执行工具调用，返回结果字符串"""
+    """Execute a configured SQL tool and return JSON text."""
     try:
         if name in TOOL_NAMES:
-            # 从 TOOLS 配置中获取工具定义
             tool_config = None
             for tool in TOOLS:
                 if tool.get("function", {}).get("name") == name:
                     tool_config = tool["function"]["parameters"]
                     break
-            
+
             if not tool_config:
-                return json.dumps({"error": f"未找到工具配置: {name}"})
-            
-            # 动态构建 param，遍历 properties
+                return json.dumps({"error": f"Tool config not found: {name}"})
+
             param = {}
             properties = tool_config.get("properties", {})
-            
+
             for prop_name, prop_config in properties.items():
                 if prop_name == "sqls":
-                    # sqls 特殊处理，使用默认值
                     param["sqls"] = arguments.get("sqls", prop_config.get("default", []))
-                else:
-                    # 其他参数从 arguments 获取，如果有 default 则使用默认值
-                    default_value = prop_config.get("default")
-                    if prop_name in arguments:
-                        param[prop_name] = arguments[prop_name]
-                    elif default_value is not None:
-                        param[prop_name] = default_value
-                    elif prop_name in arguments:
-                        param[prop_name] = arguments[prop_name]
-            
+                    continue
+
+                default_value = prop_config.get("default")
+                if prop_name in arguments:
+                    param[prop_name] = arguments[prop_name]
+                elif default_value is not None:
+                    param[prop_name] = default_value
+
             result = sql_util.execute_combine_sql(param)
             return json.dumps(result, ensure_ascii=False)
-        return json.dumps({"error": f"未知工具: {name}"})
+
+        return json.dumps({"error": f"Unknown tool: {name}"})
     except Exception as e:
-        print(f"执行工具异常: {e}")
+        print(f"Tool execution error: {e}")
         return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
 
 
 async def chat_stream(user_message: str, send_func, session_id: str = "default"):
     """
-    流式聊天，支持 Function Calling 和上下文管理。
-    send_func: 异步回调，用于逐块推送内容给客户端
-    session_id: 会话ID，用于区分不同用户的对话历史
+    Stream chat responses with tool calling and per-session context.
+
+    send_func: async callback used to push chunks to the websocket client.
+    session_id: conversation key for multi-user websocket sessions.
     """
-
-    contentArr=[
-        "你是一个图层数据查询助手，只能帮用户查询图层相关的数据。",
-        "支持的功能有：查询所有图层列表、查询指定图层的数据条数、查询指定图层的数据列表、查询指定图层中某条数据的详情。",
-        "重要：如果需要查询数据，直接调用工具，不要说'我会查询'或'接下来查询'等话。",
-        "查询完成就直接输出结果。"
-    ]
-
     try:
-        # 获取或初始化会话历史
         if session_id not in session_history:
-            session_history[session_id] = [
-                {
-                    "role": "system",
-                    "content": " ".join(contentArr)
-                }
-            ]
-        
+            session_history[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
         messages = session_history[session_id].copy()
         messages.append({"role": "user", "content": user_message})
 
-        # 循环处理 Function Calling，最多 5 轮
+        final_response_text = ""
+        completed_in_non_stream = False
+
         max_iterations = 5
         for iteration in range(max_iterations):
-            # 请求模型（非流式）
             response = client.chat.completions.create(
                 model=MODEL,
                 messages=messages,
@@ -101,76 +148,76 @@ async def chat_stream(user_message: str, send_func, session_id: str = "default")
                 tool_choice="auto",
                 stream=False,
                 max_tokens=2000,
-                temperature=0.7
+                temperature=0.7,
             )
 
             message = response.choices[0].message
-            messages.append(message.model_dump())
+            messages.append(_serialize_assistant_message(message))
 
-            # 如果没有工具调用，跳出循环
             if not message.tool_calls:
+                final_response_text = _extract_text(message.content)
+                if final_response_text:
+                    await send_func(final_response_text)
+                completed_in_non_stream = True
                 break
 
-            # 执行所有工具调用
             for tool_call in message.tool_calls:
                 func_name = tool_call.function.name
                 func_args = json.loads(tool_call.function.arguments)
 
-                print(f"[Function Calling {iteration+1}] {func_name}({func_args})")
-                
-                # 获取工具描述
+                print(f"[Function Calling {iteration + 1}] {func_name}({func_args})")
+
                 tool_desc = ""
                 for tool in TOOLS:
                     if tool.get("function", {}).get("name") == func_name:
                         tool_desc = tool["function"].get("description", "")
                         break
-                
-                # 向前端推送工具调用信息
-                await send_func(f"\n\n🔧 **{func_name}**: {tool_desc}\n\n")
-                
+
+                await send_func(f"\n\n[Tool] {func_name}: {tool_desc}\n\n")
+
                 tool_result = execute_tool(func_name, func_args)
-                print(f"[Function Result {iteration+1}] {tool_result}")
+                print(f"[Function Result {iteration + 1}] {tool_result}")
 
-                messages.append({
-                    "role": "tool",
-                    "content": tool_result,
-                    "tool_call_id": tool_call.id
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "content": tool_result,
+                        "tool_call_id": tool_call.id,
+                    }
+                )
 
-        # 最后流式输出结果
-        stream_response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            stream=True,
-            max_tokens=2000,
-            temperature=0.7
-        )
-        for chunk in stream_response:
-            delta = chunk.choices[0].delta
-            if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
-                await send_func(f"[THINKING]{delta.reasoning_content}")
-            if delta.content:
-                await send_func(delta.content)
+        if not completed_in_non_stream:
+            stream_response = client.chat.completions.create(
+                model=MODEL,
+                messages=messages,
+                stream=True,
+                max_tokens=2000,
+                temperature=0.7,
+            )
 
-        # 保存用户消息和 AI 回复到历史
-        session_history[session_id].append({"role": "user", "content": user_message})
-        if message.tool_calls:
-            # 有工具调用，保存完整的 messages
-            session_history[session_id].append(message.model_dump())
-            for msg in messages[len(session_history[session_id]):]:
-                if msg.get("role") in ["tool", "assistant"]:
-                    session_history[session_id].append(msg)
-        else:
-            # 无工具调用，保存 AI 回复
-            session_history[session_id].append({"role": "assistant", "content": message.content or ""})
-        
-        # 限制历史长度，保留最近 10 轮对话
-        if len(session_history[session_id]) > 21:  # system + 10轮(user+assistant)
+            for chunk in stream_response:
+                if not chunk.choices:
+                    continue
+
+                delta = chunk.choices[0].delta
+
+                reasoning_text = getattr(delta, "reasoning_content", None)
+                if reasoning_text:
+                    await send_func(f"[THINKING]{reasoning_text}")
+
+                content = getattr(delta, "content", None)
+                if content:
+                    final_response_text += content
+                    await send_func(content)
+
+        messages.append({"role": "assistant", "content": final_response_text})
+        session_history[session_id] = messages
+
+        if len(session_history[session_id]) > 21:
             session_history[session_id] = [session_history[session_id][0]] + session_history[session_id][-20:]
 
     except Exception as e:
-        print(f"chat_stream 异常: {e}")
-        await send_func(f"服务异常: {str(e)}")
+        print(f"chat_stream error: {e}")
+        await send_func(f"Service error: {str(e)}")
 
-    # 发送结束标志
     await send_func("[DONE]")
