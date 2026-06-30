@@ -94,5 +94,43 @@
         "required": ["layerName"]
       }
     }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "query_user_data",
+      "description": "查询用户信息，例如有用户信息数据",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sqls": {
+            "type": "array",
+            "default": [
+              "select id,username,password ,userid,sfzh ,phone ,type from gis_user"
+            ]
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "query_jq_data",
+      "description": "查询警情数据，例如有警情数据情况",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "sqls": {
+            "type": "array",
+            "default": [
+              "select * from page_test_jq"
+            ]
+          }
+        },
+        "required": []
+      }
+    }
   }
 ]
